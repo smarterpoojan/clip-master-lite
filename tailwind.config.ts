@@ -47,6 +47,12 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        gaming: {
+          primary: "hsl(var(--gaming-primary))",
+          secondary: "hsl(var(--gaming-secondary))",
+          accent: "hsl(var(--gaming-accent))",
+          warning: "hsl(var(--gaming-warning))",
+        },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",
@@ -57,6 +63,17 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+      },
+      backgroundImage: {
+        'gradient-gaming': 'var(--gradient-gaming)',
+        'gradient-accent': 'var(--gradient-accent)', 
+        'gradient-dark': 'var(--gradient-dark)',
+      },
+      boxShadow: {
+        'gaming': 'var(--shadow-gaming)',
+        'accent': 'var(--shadow-accent)',
+        'glow-gaming': 'var(--glow-gaming)',
+        'glow-accent': 'var(--glow-accent)',
       },
       borderRadius: {
         lg: "var(--radius)",
