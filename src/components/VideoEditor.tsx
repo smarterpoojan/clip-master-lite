@@ -4,19 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { VideoUpload } from './VideoUpload';
 import { VideoPreview } from './VideoPreview';
-import { Timeline } from './Timeline';
-import { ExportPanel } from './ExportPanel';
-import { Play, Pause, Download, Scissors, Zap } from 'lucide-react';
+import { ClipPreview } from './ClipPreview';
+import { Zap, Sparkles, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-
-export interface VideoClip {
-  id: string;
-  startTime: number;
-  endTime: number;
-  duration: number;
-  title: string;
-  thumbnail?: string;
-}
+import { useFFmpeg, ProcessedClip } from '@/hooks/useFFmpeg';
 
 export const VideoEditor = () => {
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -24,13 +15,11 @@ export const VideoEditor = () => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [clips, setClips] = useState<VideoClip[]>([]);
-  const [selectedClip, setSelectedClip] = useState<VideoClip | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [processingProgress, setProcessingProgress] = useState(0);
+  const [processedClips, setProcessedClips] = useState<ProcessedClip[]>([]);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const { toast } = useToast();
+  const { isLoaded, isProcessing, progress, detectHighlights, downloadClip } = useFFmpeg();
 
   const handleVideoUpload = useCallback((file: File) => {
     setVideoFile(file);
@@ -68,60 +57,47 @@ export const VideoEditor = () => {
   const handleAutoDetect = async () => {
     if (!videoFile) return;
     
-    setIsProcessing(true);
-    setProcessingProgress(0);
-    
     try {
-      // Simulate auto-detection progress
-      const interval = setInterval(() => {
-        setProcessingProgress(prev => {
-          if (prev >= 90) {
-            clearInterval(interval);
-            return 90;
-          }
-          return prev + 10;
-        });
-      }, 500);
-
-      // Mock highlight detection - in real implementation, use ffmpeg.wasm
-      setTimeout(() => {
-        const mockClips: VideoClip[] = [
-          { id: '1', startTime: 45, endTime: 105, duration: 60, title: 'Epic Victory Moment' },
-          { id: '2', startTime: 180, endTime: 235, duration: 55, title: 'Incredible Play' },
-          { id: '3', startTime: 320, endTime: 375, duration: 55, title: 'Clutch Save' },
-        ];
-        
-        setClips(mockClips);
-        setProcessingProgress(100);
-        setIsProcessing(false);
-        
-        toast({
-          title: "Highlights Detected!",
-          description: `Found ${mockClips.length} potential clips`,
-        });
-      }, 3000);
-    } catch (error) {
-      setIsProcessing(false);
       toast({
-        title: "Detection Failed",
-        description: "Failed to detect highlights. Please try again.",
+        title: "Processing Video",
+        description: "Analyzing your video for epic moments...",
+      });
+
+      const clips = await detectHighlights(videoFile);
+      setProcessedClips(clips);
+      
+      toast({
+        title: "Highlights Generated!",
+        description: `Created ${clips.length} YouTube Shorts ready for download`,
+      });
+    } catch (error) {
+      console.error('Error processing video:', error);
+      toast({
+        title: "Processing Failed",
+        description: "Failed to process video. Please try again.",
         variant: "destructive",
       });
     }
   };
 
-  const handleCreateClip = (startTime: number, endTime: number) => {
-    const newClip: VideoClip = {
-      id: Date.now().toString(),
-      startTime,
-      endTime,
-      duration: endTime - startTime,
-      title: `Clip ${clips.length + 1}`,
-    };
-    setClips([...clips, newClip]);
+  const handleDownloadClip = (clip: ProcessedClip) => {
+    downloadClip(clip);
     toast({
-      title: "Clip Created",
-      description: `New ${newClip.duration.toFixed(1)}s clip added`,
+      title: "Download Started",
+      description: `${clip.title} is downloading...`,
+    });
+  };
+
+  const handleDownloadAll = () => {
+    processedClips.forEach((clip, index) => {
+      setTimeout(() => {
+        downloadClip(clip);
+      }, index * 500); // Stagger downloads
+    });
+    
+    toast({
+      title: "Downloading All Clips",
+      description: `${processedClips.length} shorts are downloading...`,
     });
   };
 
@@ -146,92 +122,139 @@ export const VideoEditor = () => {
         )}
 
         {/* Main Editor */}
-        {videoFile && (
-          <div className="grid gap-6 lg:grid-cols-3">
-            {/* Video Preview */}
-            <div className="lg:col-span-2 space-y-4">
-              <Card className="border-gaming-primary/20 bg-card/50 backdrop-blur">
-                <VideoPreview
-                  videoUrl={videoUrl}
-                  videoRef={videoRef}
-                  onTimeUpdate={handleTimeUpdate}
-                  onLoadedMetadata={handleLoadedMetadata}
-                />
-              </Card>
-              
-              {/* Controls */}
-              <Card className="border-gaming-primary/20 bg-card/50 backdrop-blur p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handlePlayPause}
-                      className="border-gaming-primary/50 hover:bg-gaming-primary/10"
-                    >
-                      {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                    </Button>
-                    
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleAutoDetect}
-                      disabled={isProcessing}
-                      className="border-gaming-secondary/50 hover:bg-gaming-secondary/10"
-                    >
-                      <Zap className="h-4 w-4 mr-2" />
-                      Auto-Detect Highlights
-                    </Button>
-                  </div>
-                  
-                  <div className="text-sm text-muted-foreground">
-                    {Math.floor(currentTime / 60)}:{Math.floor(currentTime % 60).toString().padStart(2, '0')} /
-                    {Math.floor(duration / 60)}:{Math.floor(duration % 60).toString().padStart(2, '0')}
-                  </div>
+        {videoFile && !isProcessing && processedClips.length === 0 && (
+          <div className="space-y-6">
+            {/* Original Video Preview */}
+            <Card className="border-gaming-primary/20 bg-card/50 backdrop-blur">
+              <VideoPreview
+                videoUrl={videoUrl}
+                videoRef={videoRef}
+                onTimeUpdate={handleTimeUpdate}
+                onLoadedMetadata={handleLoadedMetadata}
+              />
+            </Card>
+            
+            {/* AI Processing Controls */}
+            <Card className="border-gaming-primary/20 bg-card/50 backdrop-blur p-6">
+              <div className="text-center space-y-4">
+                <div className="space-y-2">
+                  <h3 className="text-xl font-semibold text-foreground">AI Highlight Detection</h3>
+                  <p className="text-muted-foreground">
+                    Our AI will automatically detect epic moments and create optimized YouTube Shorts
+                  </p>
                 </div>
                 
-                {isProcessing && (
-                  <div className="mt-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-gaming-secondary">Detecting highlights...</span>
-                      <span className="text-sm text-muted-foreground">{processingProgress}%</span>
+                <Button
+                  size="lg"
+                  onClick={handleAutoDetect}
+                  disabled={isProcessing || !isLoaded}
+                  className="bg-gradient-gaming hover:shadow-gaming transition-all duration-300 px-8 py-6 text-lg"
+                >
+                  <Sparkles className="h-5 w-5 mr-3" />
+                  {!isLoaded ? 'Loading AI...' : 'Generate Shorts'}
+                </Button>
+                
+                <div className="grid grid-cols-3 gap-4 mt-6 text-sm text-muted-foreground">
+                  <div className="text-center">
+                    <div className="w-8 h-8 bg-gaming-primary/20 rounded-full flex items-center justify-center mx-auto mb-2">
+                      <Zap className="h-4 w-4 text-gaming-primary" />
                     </div>
-                    <Progress value={processingProgress} className="h-2" />
+                    <p>Audio Analysis</p>
                   </div>
-                )}
-              </Card>
-              
-              {/* Timeline */}
-              <Card className="border-gaming-primary/20 bg-card/50 backdrop-blur">
-                <Timeline
-                  duration={duration}
-                  currentTime={currentTime}
-                  clips={clips}
-                  onSeek={(time) => {
-                    if (videoRef.current) {
-                      videoRef.current.currentTime = time;
-                      setCurrentTime(time);
-                    }
-                  }}
-                  onCreateClip={handleCreateClip}
-                />
-              </Card>
-            </div>
+                  <div className="text-center">
+                    <div className="w-8 h-8 bg-gaming-secondary/20 rounded-full flex items-center justify-center mx-auto mb-2">
+                      <Sparkles className="h-4 w-4 text-gaming-secondary" />
+                    </div>
+                    <p>Scene Detection</p>
+                  </div>
+                  <div className="text-center">
+                    <div className="w-8 h-8 bg-gaming-accent/20 rounded-full flex items-center justify-center mx-auto mb-2">
+                      <Download className="h-4 w-4 text-gaming-accent" />
+                    </div>
+                    <p>9:16 Format</p>
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </div>
+        )}
 
-            {/* Export Panel */}
-            <div className="space-y-4">
-              <ExportPanel
-                clips={clips}
-                selectedClip={selectedClip}
-                onSelectClip={setSelectedClip}
-                onDeleteClip={(clipId) => {
-                  setClips(clips.filter(clip => clip.id !== clipId));
-                  if (selectedClip?.id === clipId) {
-                    setSelectedClip(null);
-                  }
-                }}
-              />
+        {/* Processing State */}
+        {isProcessing && (
+          <Card className="border-gaming-primary/20 bg-card/50 backdrop-blur p-8">
+            <div className="text-center space-y-4">
+              <div className="w-16 h-16 bg-gradient-gaming rounded-full flex items-center justify-center mx-auto animate-pulse">
+                <Sparkles className="h-8 w-8 text-white" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-xl font-semibold text-foreground">Processing Your Video</h3>
+                <p className="text-muted-foreground">AI is analyzing and creating your YouTube Shorts...</p>
+              </div>
+              <div className="max-w-md mx-auto">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-gaming-secondary">Processing...</span>
+                  <span className="text-sm text-muted-foreground">{progress}%</span>
+                </div>
+                <Progress value={progress} className="h-3" />
+              </div>
             </div>
+          </Card>
+        )}
+
+        {/* Generated Clips */}
+        {processedClips.length > 0 && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold text-foreground">Your YouTube Shorts</h2>
+                <p className="text-muted-foreground">
+                  {processedClips.length} clips generated and ready for download
+                </p>
+              </div>
+              
+              {processedClips.length > 1 && (
+                <Button
+                  variant="outline"
+                  onClick={handleDownloadAll}
+                  className="border-gaming-accent/50 hover:bg-gaming-accent/10"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Download All ({processedClips.length})
+                </Button>
+              )}
+            </div>
+            
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {processedClips.map((clip) => (
+                <ClipPreview
+                  key={clip.id}
+                  clip={clip}
+                  onDownload={handleDownloadClip}
+                />
+              ))}
+            </div>
+            
+            {/* Generate More Button */}
+            <Card className="border-gaming-primary/20 bg-card/50 backdrop-blur p-6">
+              <div className="text-center space-y-4">
+                <h3 className="text-lg font-semibold text-foreground">Want More Clips?</h3>
+                <p className="text-muted-foreground">
+                  Upload a new video or regenerate with different settings
+                </p>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setVideoFile(null);
+                    setVideoUrl('');
+                    setProcessedClips([]);
+                  }}
+                  className="border-gaming-primary/50 hover:bg-gaming-primary/10"
+                >
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Upload New Video
+                </Button>
+              </div>
+            </Card>
           </div>
         )}
       </div>
